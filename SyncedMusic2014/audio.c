@@ -3,6 +3,7 @@
 #include "audio.h"
 
 #define PA_SAMPLE_TYPE paFloat32
+#define FRAMES_PER_BUFFER 1024
 
 PaStream* setupStream(double sampleRate, PaDeviceIndex inputDevice, PaDeviceIndex outputDevice)
 {
@@ -48,6 +49,8 @@ PaStream* setupStream(double sampleRate, PaDeviceIndex inputDevice, PaDeviceInde
 		printf("Pa_OpenStream failed with error: %d\n", paError);
 		return NULL;
 	}
+
+	return paStream;
 }
 
 void printDeviceInfo()
@@ -59,7 +62,7 @@ void printDeviceInfo()
 	puts("");
 
 	for (PaDeviceIndex deviceIndex = 0; deviceIndex < Pa_GetDeviceCount(); deviceIndex++) {
-		PaDeviceInfo* info = Pa_GetDeviceInfo(deviceIndex); // must not free this memory
+		const PaDeviceInfo* info = Pa_GetDeviceInfo(deviceIndex); // must not free this memory
 		if (info != NULL) {
 			printf("device index: %d\n", deviceIndex);
 			printf("host api index: %d\n", info->hostApi);

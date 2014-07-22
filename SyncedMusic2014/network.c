@@ -4,12 +4,8 @@
 
 SOCKET setupListeningSocket(const unsigned short port)
 {
-	SOCKET serverSocket = INVALID_SOCKET;
-	WSADATA wsaData;
-	struct addrinfo* result;
-	struct addrinfo hints;
 	int iResult;
-	
+	WSADATA wsaData;
 	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	
 	if (iResult != 0) {
@@ -18,6 +14,7 @@ SOCKET setupListeningSocket(const unsigned short port)
 		return INVALID_SOCKET;
 	}
 
+	struct addrinfo hints;
 	ZeroMemory(&hints, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
@@ -27,6 +24,7 @@ SOCKET setupListeningSocket(const unsigned short port)
 	char buffer[16];
 	_itoa_s(port, buffer, 16, 10);
 
+	struct addrinfo* result;
 	iResult = getaddrinfo(NULL, buffer, &hints, &result);
 	if (iResult != 0) {
 		printf("getaddrinfo failed with error: %d\n", iResult);
@@ -34,10 +32,21 @@ SOCKET setupListeningSocket(const unsigned short port)
 		return INVALID_SOCKET;
 	}
 
+	SOCKET serverSocket = INVALID_SOCKET;
 	serverSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 	if (serverSocket == INVALID_SOCKET) {
 		printf("socket failed with error: %ld\n", WSAGetLastError());
 		freeaddrinfo(result);
+		WSACleanup();
+		return INVALID_SOCKET;
+	}
+
+	u_long iMode = 1; // blocking: 0, nonblocking: 1
+	iResult = ioctlsocket(serverSocket, FIONBIO, &iMode);
+	if (iResult != NO_ERROR) {
+		printf("ioctlsocket failed with error: %d\n", iResult);
+		freeaddrinfo(result);
+		closesocket(serverSocket);
 		WSACleanup();
 		return INVALID_SOCKET;
 	}
