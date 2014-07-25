@@ -19,5 +19,5 @@ typedef struct {
 TimerState* createTimer();
 timer_t getTime(TimerState* const timerState);
 void updateTimer(TimerState* const timerState, const timer_t lowPrecisionTime);
-
+timer_t getHighPrecisionTime();
 #endif // TIME_H

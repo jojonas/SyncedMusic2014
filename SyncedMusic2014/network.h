@@ -9,18 +9,28 @@
 
 #define SAMPLES_PER_PACKET 12
 
-typedef float sample_t;
+#define PACKETTYPE_TIMESTAMP 1
+#define PACKETTYPE_SOUND 2
 
+typedef float sample_t;
+typedef int PacketType;
+
+#pragma pack(push,1) // disable alignment locally
 typedef struct {
+	unsigned int size;
+	PacketType type;
 	timer_t playTime;
 	sample_t samples[SAMPLES_PER_PACKET];
 } SoundPacket;
 
 typedef struct {
+	unsigned int size;
+	PacketType type;
 	timer_t time;
 } TimestampPacket;
-
+#pragma pack(pop) // end disable alignment
 
 SOCKET setupListeningSocket(const unsigned short port);
+SOCKET setupConnection(const char* host, const int port);
 
 #endif // NETWORK_H

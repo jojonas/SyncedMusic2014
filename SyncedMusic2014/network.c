@@ -72,3 +72,37 @@ SOCKET setupListeningSocket(const unsigned short port)
 
 	return serverSocket;
 }
+
+SOCKET setupConnection(const char* host, const int port)
+{
+	struct addrinfo hints;
+	
+	ZeroMemory(&hints, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	int iResult;
+
+	char buffer[16];
+	_itoa_s(port, buffer, 16, 10);
+
+	struct addrinfo* result;
+	iResult = getaddrinfo(host, buffer, &hints, &result);
+	if (iResult != 0) {
+		printf("getaddrinfo failed: %d\n", iResult);
+		WSACleanup();
+		return INVALID_SOCKET;
+	}
+
+	SOCKET clientSocket = INVALID_SOCKET;
+	clientSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+	if (clientSocket == INVALID_SOCKET) {
+		printf("Error at socket(): %ld\n", WSAGetLastError());
+		freeaddrinfo(result);
+		WSACleanup();
+		return INVALID_SOCKET;
+	}
+
+	return clientSocket;
+}

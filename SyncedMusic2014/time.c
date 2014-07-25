@@ -24,6 +24,8 @@ void updateLinearRegression(TimerState* const timerState) {
 	timerState->offset = (x_sq_sum*y_sum - x_sum*xy_sum) / denominator;
 }
 
+// === PUBLIC ===
+
 timer_t getHighPrecisionTime() {
 	LARGE_INTEGER performanceCounter;
 	LARGE_INTEGER frequency;
@@ -38,7 +40,6 @@ timer_t getHighPrecisionTime() {
 	}
 }
 
-// === PUBLIC ===
 
 TimerState* createTimer()
 {
