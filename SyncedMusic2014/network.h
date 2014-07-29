@@ -5,9 +5,8 @@
 //#include <winsock.h>
 #include <WS2tcpip.h>
 
+#include "audio.h"
 #include "time.h"
-
-#define SAMPLES_PER_PACKET 12
 
 #define PACKETTYPE_TIMESTAMP 1
 #define PACKETTYPE_SOUND 2
@@ -20,7 +19,7 @@ typedef struct {
 	unsigned int size;
 	PacketType type;
 	timer_t playTime;
-	sample_t samples[SAMPLES_PER_PACKET];
+	sample_t samples[AUDIO_BUFFER_SIZE];
 } SoundPacket;
 
 typedef struct {

@@ -3,7 +3,7 @@
 
 #define TIMER_POINT_COUNT 50
 
-typedef float timer_t;
+typedef double timer_t;
 
 typedef struct {
 	timer_t lowPrecisionTimePoints[TIMER_POINT_COUNT];
@@ -12,8 +12,8 @@ typedef struct {
 	int dirty; // needs new linear regression if != 0
 	int full; // has been written once?
 
-	float slope; // from linear regression: y=slope*x + offset
-	float offset;
+	timer_t slope; // from linear regression: y=slope*x + offset
+	timer_t offset;
 } TimerState;
 
 TimerState* createTimer();

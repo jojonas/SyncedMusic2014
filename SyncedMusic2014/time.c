@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 // === PRIVATE ===
 
@@ -9,7 +10,7 @@ void updateLinearRegression(TimerState* const timerState) {
 	const int n = timerState->full ? TIMER_POINT_COUNT : timerState->nextPoint;
 	const timer_t* const x = timerState->highPrecisionTimePoints;
 	const timer_t* const y = timerState->lowPrecisionTimePoints;
-
+	
 	timer_t xy_sum = 0, x_sum = 0, y_sum = 0, x_sq_sum = 0;
 	for (int i = 0; i < n; i++) {
 		xy_sum += x[i] * y[i];
@@ -18,7 +19,7 @@ void updateLinearRegression(TimerState* const timerState) {
 		x_sq_sum += x[i] * x[i];
 	}
 
-	const float denominator = (n*x_sq_sum - x_sum*x_sum);
+	const timer_t denominator = (n*x_sq_sum - x_sum*x_sum);
 
 	timerState->slope = (n*xy_sum - x_sum*y_sum) / denominator;
 	timerState->offset = (x_sq_sum*y_sum - x_sum*xy_sum) / denominator;
@@ -44,17 +45,25 @@ timer_t getHighPrecisionTime() {
 TimerState* createTimer()
 {
 	TimerState* const timerState = malloc(sizeof(TimerState));
+	if (!timerState) {
+		puts("could not allocate memory for timer state");
+		return NULL;
+	}
 	timerState->nextPoint = 0;
 	timerState->dirty = 1;
+	timerState->full = 0;
 	return timerState;
 }
 
 timer_t getTime(TimerState* const timerState)
 {
-	if (timerState->dirty) 
+	if (timerState->dirty) {
 		updateLinearRegression(timerState);
+		timerState->dirty = 0;
+	}
 
-	return 0;
+	const timer_t highPrecisionTime = getHighPrecisionTime();
+	return timerState->slope * highPrecisionTime + timerState->offset;
 }
 
 void updateTimer(TimerState* const timerState, const timer_t lowPrecisionTime)

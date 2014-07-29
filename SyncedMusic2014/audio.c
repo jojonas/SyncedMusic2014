@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include "audio.h"
 
-#define PA_SAMPLE_TYPE paFloat32
-#define FRAMES_PER_BUFFER 1024
 
-PaStream* setupStream(double sampleRate, PaDeviceIndex inputDevice, PaDeviceIndex outputDevice)
+PaStream* setupStream(PaDeviceIndex inputDevice, PaDeviceIndex outputDevice)
 {
-	PaStreamParameters paInputParameters, paOutputParameters;
+	PaStreamParameters* paInputParameters;
+	PaStreamParameters* paOutputParameters;
+
 	PaStream *paStream = NULL;
 	PaError paError;
 
@@ -17,27 +17,50 @@ PaStream* setupStream(double sampleRate, PaDeviceIndex inputDevice, PaDeviceInde
 		return NULL;
 	}
 	
-	paInputParameters.device = inputDevice;
-	paInputParameters.channelCount = Pa_GetDeviceInfo(inputDevice)->maxInputChannels;
-	paInputParameters.sampleFormat = PA_SAMPLE_TYPE;
-	paInputParameters.suggestedLatency = Pa_GetDeviceInfo(inputDevice)->defaultLowInputLatency;
-	paInputParameters.hostApiSpecificStreamInfo = NULL;
+	if (inputDevice >= 0) {
+		paInputParameters = malloc(sizeof(PaStreamParameters));
+		if (!paInputParameters) {
+			puts("cannot allocate memory for input params");
+			return NULL;
+		}
+		paInputParameters->device = inputDevice;
+		paInputParameters->channelCount = Pa_GetDeviceInfo(inputDevice)->maxInputChannels;
+		paInputParameters->sampleFormat = SAMPLE_TYPE;
+		paInputParameters->suggestedLatency = Pa_GetDeviceInfo(inputDevice)->defaultLowInputLatency;
+		paInputParameters->hostApiSpecificStreamInfo = NULL;
+	}
+	else {
+		paInputParameters = NULL;
+	}
 
-	paOutputParameters.device = outputDevice;
-	paOutputParameters.channelCount = Pa_GetDeviceInfo(outputDevice)->maxOutputChannels;
-	paOutputParameters.sampleFormat = PA_SAMPLE_TYPE;
-	paOutputParameters.suggestedLatency = Pa_GetDeviceInfo(outputDevice)->defaultHighOutputLatency;
-	paOutputParameters.hostApiSpecificStreamInfo = NULL;
+	if (outputDevice >= 0) {
+		paOutputParameters = malloc(sizeof(PaStreamParameters));
+		if (!paOutputParameters) {
+			puts("cannot allocate memory for input params");
+			return NULL;
+		}
+		paOutputParameters->device = outputDevice;
+		paOutputParameters->channelCount = Pa_GetDeviceInfo(outputDevice)->maxOutputChannels;
+		paOutputParameters->sampleFormat = SAMPLE_TYPE;
+		paOutputParameters->suggestedLatency = Pa_GetDeviceInfo(outputDevice)->defaultHighOutputLatency;
+		paOutputParameters->hostApiSpecificStreamInfo = NULL;
+	}
+	else {
+		paOutputParameters = NULL;
+	}
 
 	paError = Pa_OpenStream(
 		&paStream,
-		&paInputParameters,
-		&paOutputParameters,
-		sampleRate,
-		FRAMES_PER_BUFFER,
+		paInputParameters,
+		paOutputParameters,
+		SAMPLE_RATE,
+		FRAMES_PER_PACKET,
 		paClipOff,   
 		NULL, 
 		NULL);
+
+	free(paInputParameters);
+	free(paOutputParameters);
 
 	if (paError != paNoError) {
 		printf("Pa_OpenStream failed with error: %d\n", paError);
@@ -53,7 +76,7 @@ PaStream* setupStream(double sampleRate, PaDeviceIndex inputDevice, PaDeviceInde
 	return paStream;
 }
 
-void printDeviceInfo()
+void printAudioDeviceList()
 {
 	Pa_Initialize();
 	puts("=== PORTAUDIO DEVICES ===");

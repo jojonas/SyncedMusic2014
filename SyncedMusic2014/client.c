@@ -1,12 +1,13 @@
 #include "client.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <signal.h>
 
 #include "network.h"
 #include "server.h"
 
-#define BUFFERSIZE 1024
+#define NETWORK_BUFFER_SIZE 1024*1024
 
 volatile BOOL terminateClient;
 
@@ -18,26 +19,55 @@ void ctrlCClientHandler(int signal) {
 
 int clientMain(int argc, char** argv)
 {
+	assert(AUDIO_BUFFER_SIZE <= NETWORK_BUFFER_SIZE);
+
+	puts("info:");
+	printAudioDeviceList();
+
 	puts("Initiated client mode.");
+
+	char* buffer = malloc(NETWORK_BUFFER_SIZE*sizeof(char));
+	if (!buffer) {
+		printf("could not allocate %d bytes for network buffer\n", NETWORK_BUFFER_SIZE);
+		return 1;
+	}
 
 	SOCKET clientSocket = setupConnection(argv[1], SERVER_PORT);
 	if (clientSocket == INVALID_SOCKET) {
 		printf("could not connect to server\n");
+		free(buffer);
 		return 1;
 	}
 
 	TimerState* timer = createTimer();
 
-	char* buffer = malloc(BUFFERSIZE*sizeof(char));
 	unsigned int dataEndIndex = 0;
 
-	signal(SIGINT, ctrlCClientHandler);
+	Pa_Initialize();
+	const PaDeviceIndex defaultOutputDevice = Pa_GetDefaultOutputDevice();
+	PaStream* paStream = setupStream(-1, defaultOutputDevice);
 
+	signal(SIGINT, ctrlCClientHandler);
 	while (!terminateClient) {
-		const int bytesReceived = recv(clientSocket, buffer + dataEndIndex, BUFFERSIZE - dataEndIndex, 0);
+		const int bytesReceived = recv(clientSocket, buffer + dataEndIndex, NETWORK_BUFFER_SIZE - dataEndIndex, 0);
+
+		if (bytesReceived == SOCKET_ERROR) {
+			const int error = WSAGetLastError();
+			printf("recv failed with error: %d\n", error);
+			if (error == WSAECONNRESET) {
+				puts("connection reset by peer, quiting");
+				break;
+			}
+			else {
+				continue;
+			}
+		}
+
 		dataEndIndex += bytesReceived;
+
 		unsigned int size;
-		while ((size = *(unsigned int*)buffer) <= dataEndIndex) {
+		while (dataEndIndex > 0 && (size = *(unsigned int*)buffer) <= dataEndIndex) {
+			printf("client packet size: %d\n", size);
 			// paket ganz!
 			const PacketType type = *(PacketType*)(buffer + sizeof(unsigned int));
 			switch (type) {
@@ -48,29 +78,43 @@ int clientMain(int argc, char** argv)
 				}
 				break;
 			case PACKETTYPE_SOUND:
-				puts("Traceback (most recent call last):\n  File \"<stdin>\", line 1, in < module >\nNotImplementedError");
+				{
+					SoundPacket* packet = (SoundPacket*)buffer;
+					PaError error = Pa_WriteStream(paStream, packet->samples, FRAMES_PER_PACKET);
+					if (error != paNoError) {
+						printf("Pa_WriteStream failed with error: %d\n", error);
+					}
+				}
 				break;
 			default:
-				puts("oh fuck. gg.");
+				printf("Invalid packet type: %d\n", type);
+				break;
 			}
 
 			memmove(buffer, buffer + size, dataEndIndex - size);
 			dataEndIndex -= size;
 		}
-		printf("client time: %f\n", getTime(timer));
 	}
 
 	shutdown(clientSocket, SD_SEND);
 
 	int bytesReceived;
 	do {
-		bytesReceived = recv(clientSocket, buffer, BUFFERSIZE, 0);
+		bytesReceived = recv(clientSocket, buffer, NETWORK_BUFFER_SIZE, 0);
 		if (bytesReceived == SOCKET_ERROR) {
 			puts("graceful socket shutdown failed");
 			break;
 		}
 	} while (bytesReceived != 0);
 	closesocket(clientSocket);
+	
+
+	Pa_AbortStream(paStream);
+	Pa_CloseStream(paStream);
+	Pa_Terminate();
+
+	free(timer);
+
 	free(buffer);
 
 	return 0;
