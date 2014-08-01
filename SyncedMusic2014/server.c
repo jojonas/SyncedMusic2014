@@ -14,29 +14,29 @@
 #define TIMESTAMP_BROADCAST_UPPER 1.5f
 #define TIMESTAMP_BROADCAST_LOWER 0.5f
 
+#define MAX_CLIENTS 16
+
 volatile BOOL terminateServer;
 
-typedef struct {
-	fd_set* clients;
-	HANDLE clientsMutex;
-	SOCKET serverSocket;
-	volatile BOOL terminate;
-} ServerNetState;
-
-
-typedef struct Queue {
+typedef struct QueueElement {
 	void* payload;
 	size_t length;
-	struct Queue* next;
-} Queue;
+	struct QueueElement* next;
+} QueueElement;
 
 
 typedef struct {
-	Queue** head;
+	QueueElement** head;
 	HANDLE mutex;
 	SOCKET socket;
 	BOOL terminate;
+	BOOL join;
 } QueueWorkerState;
+
+typedef struct {
+	QueueWorkerState* workerState;
+	HANDLE threadHandle;
+} ClientData;
 
 void broadcast(fd_set* clients, const char* const data, const int length, const int flags) {
 	for (unsigned int clientIndex = 0; clientIndex < clients->fd_count; clientIndex++) {
@@ -47,7 +47,8 @@ void broadcast(fd_set* clients, const char* const data, const int length, const 
 			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
 				FD_CLR(clientSocket, clients);
 				printf("client disconnected, now %d clients\n", clients->fd_count);
-			} else {
+			}
+			else {
 				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
 			}
 		}
@@ -65,15 +66,21 @@ float randf(const float min, const float max) {
 
 DWORD WINAPI workerThread(void* param) {
 	QueueWorkerState* state = (QueueWorkerState*)param;
-	SOCKET socket = NULL;
-	Queue* currentPacket;
-	while (!end) {
-		void* packet = currentPacket->payload;
-		
-		send(socket, packet, currentPacket->length, 0);
+	SOCKET socket = state->socket;
+	while (!state->terminate) {
+		void* packet = state->head->payload;
+		send(socket, packet, state->head->length, 0);
 
-		currentPacket = currentPacket->next;
+		DWORD waitResult = WaitForSingleObject(ghMutex, INFINITE);
+		if (waitResult == WAIT_OBJECT_0) {
+			state->head = state->head->next;
+		}
+		else {
+			printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
+			return 1;
+		}
 	}
+	return 0;
 }
 
 
@@ -107,9 +114,15 @@ int serverMain(int argc, char** argv)
 		return 1;
 	}
 
-	fd_set clients;
-	FD_ZERO(&clients);
-	
+	fd_set clientSockets;
+	FD_ZERO(&clientSockets);
+	ClientData clientData[MAX_CLIENTS];
+	for (int i = 0; i < MAX_CLIENTS; ++i) {
+		clientData[i].workerState = 0;
+		clientData[i].threadHandle = 0;
+	}
+	int nextClientIndex = 0;
+
 	timer_t nextTimestampUpdateAt = 0.0f;
 	timer_t nextTimestampBroadcastAt = 0.0f;
 
@@ -117,7 +130,7 @@ int serverMain(int argc, char** argv)
 	const PaDeviceIndex defaultInputDevice = Pa_GetDefaultInputDevice();
 	PaStream* paStream = setupStream(defaultInputDevice, -1);
 
-	
+
 	signal(SIGINT, ctrlCServerHandler);
 	while (!terminateServer) {
 		const timer_t now = getHighPrecisionTime();
@@ -141,11 +154,23 @@ int serverMain(int argc, char** argv)
 				}
 			}
 			else {
-				FD_SET(clientSocket, &clients);
-				printf("client accepted, now %d clients\n", clients.fd_count);
-				if (clients.fd_count > FD_SETSIZE) {
+				FD_SET(clientSocket, &clientSockets);
+				printf("client accepted, now %d clients\n", clientSockets.fd_count);
+				if (clientSockets.fd_count > FD_SETSIZE) {
 					puts("maximum client size reached");
 				}
+
+				clientData[nextClientIndex].workerState = malloc(sizeof(QueueWorkerState));
+				clientData[nextClientIndex].workerState->mutex = CreateMutex(NULL, 0, NULL);
+				clientData[nextClientIndex].workerState->socket = clientSocket;
+				clientData[nextClientIndex].workerState->terminate = FALSE;
+				clientData[nextClientIndex].workerState->join = FALSE;
+				clientData[nextClientIndex].workerState->head = malloc(sizeof(QueueElement*));
+				*(clientData[nextClientIndex].workerState->head) = 0;
+
+				clientData[nextClientIndex].threadHandle = CreateThread(NULL, 0, workerThread, clientData[nextClientIndex].workerState, 0, NULL);
+				nextClientIndex = (nextClientIndex + 1) % MAX_CLIENTS;
+				// TODO: Deleting clients and joining threads upon execution
 			}
 		}
 
@@ -161,7 +186,7 @@ int serverMain(int argc, char** argv)
 			packet.type = PACKETTYPE_TIMESTAMP;
 			packet.size = sizeof(packet);
 			packet.time = getTime(timerState);
-			broadcast(&clients, (const char*)&packet, packet.size, 0);
+			broadcast(&clientSockets, (const char*)&packet, packet.size, 0);
 
 			nextTimestampBroadcastAt = now + randf(TIMESTAMP_BROADCAST_LOWER, TIMESTAMP_BROADCAST_UPPER);
 		}
@@ -173,10 +198,20 @@ int serverMain(int argc, char** argv)
 		}
 		packet->playTime = getTime(timerState) + PLAY_DELAY;
 		packet->size = sizeof(SoundPacket);
-		broadcast(&clients, (const char*)packet, packet->size, 0);
+		broadcast(&clientSockets, (const char*)packet, packet->size, 0);
 		// -> falls Client disconnected, hole Mutex und entferne aus Liste (das wird Scheiﬂe, weil das ein Array ist... Schieberei?)
 
-		
+		for (int i = 0; i < MAX_CLIENTS; ++i) {
+			if (clientData[i].workerState && clientData[i].workerState->join) {
+				WaitForSingleObject(clientData[i].threadHandle);
+			}
+		}
+	}
+
+	for (int i = 0; i < MAX_CLIENTS; ++i) {
+		if (clientData[i].workerState)
+			clientData[i].workerState->terminate = TRUE;
+		WaitForSingleObject(clientData[i].threadHandle);
 	}
 
 	Pa_AbortStream(paStream);
