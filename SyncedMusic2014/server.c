@@ -101,6 +101,22 @@ DWORD WINAPI workerThread(void* param) {
 	return 0;
 }
 
+void deleteClientData(ClientData* cData) {
+	WaitForSingleObject(cData->threadHandle);
+	CloseHandle(cData->workerState->mutex);
+	closeSocket(cData->workerState->socket);
+	CloseHandle(cData->threadHandle);
+	QueueElement* current = *(cData->workerState->head);
+	while (current) {
+		QueueElement* next = current->next;
+		free(current->payload);
+		free(current);
+		current = next;
+	}
+	free(cData->workerState->head);
+	free(cData->workerState);
+}
+
 
 void ctrlCServerHandler(int signal) {
 	if (signal == SIGINT) {
@@ -220,8 +236,11 @@ int serverMain(int argc, char** argv)
 		// -> falls Client disconnected, hole Mutex und entferne aus Liste (das wird Scheiﬂe, weil das ein Array ist... Schieberei?)
 
 		for (int i = 0; i < MAX_CLIENTS; ++i) {
-			if (clientData[i].workerState && clientData[i].workerState->join) {
-				WaitForSingleObject(clientData[i].threadHandle);
+			if (clientData[i].workerState) {
+				WaitForSingleObject(clientData[i].workerState->mutex);
+				if (clientData[i].workerState->join)
+					deleteClientData(clientData + i);
+				ReleaseMutex(clientData[i].workerState->mutex);
 			}
 		}
 	}
@@ -229,7 +248,7 @@ int serverMain(int argc, char** argv)
 	for (int i = 0; i < MAX_CLIENTS; ++i) {
 		if (clientData[i].workerState)
 			clientData[i].workerState->terminate = TRUE;
-		WaitForSingleObject(clientData[i].threadHandle);
+		deleteClientData(clientData + i);
 	}
 
 	Pa_AbortStream(paStream);
