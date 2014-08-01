@@ -24,17 +24,28 @@ typedef struct {
 } ServerNetState;
 
 
+typedef struct Queue {
+	void* payload;
+	size_t length;
+	struct Queue* next;
+} Queue;
+
+
+typedef struct {
+	Queue** head;
+	HANDLE mutex;
+	SOCKET socket;
+	BOOL terminate;
+} QueueWorkerState;
+
 void broadcast(fd_set* clients, const char* const data, const int length, const int flags) {
 	for (unsigned int clientIndex = 0; clientIndex < clients->fd_count; clientIndex++) {
 		SOCKET clientSocket = clients->fd_array[clientIndex];
 		const int sendResult = send(clientSocket, data, length, flags);
 		if (sendResult == SOCKET_ERROR) {
 			const int error = WSAGetLastError();
-			if (error == WSAECONNABORTED) {
-				for (unsigned int moveIndex = clientIndex + 1; moveIndex < clients->fd_count; moveIndex++) {
-					clients->fd_array[moveIndex-1] = clients->fd_array[moveIndex];
-				}
-				clients->fd_count--;
+			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
+				FD_CLR(clientSocket, clients);
 				printf("client disconnected, now %d clients\n", clients->fd_count);
 			} else {
 				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
@@ -50,6 +61,21 @@ void broadcast(fd_set* clients, const char* const data, const int length, const 
 float randf(const float min, const float max) {
 	return min + (max - min)*rand() / RAND_MAX;
 }
+
+
+DWORD WINAPI workerThread(void* param) {
+	QueueWorkerState* state = (QueueWorkerState*)param;
+	SOCKET socket = NULL;
+	Queue* currentPacket;
+	while (!end) {
+		void* packet = currentPacket->payload;
+		
+		send(socket, packet, currentPacket->length, 0);
+
+		currentPacket = currentPacket->next;
+	}
+}
+
 
 void ctrlCServerHandler(int signal) {
 	if (signal == SIGINT) {
@@ -82,7 +108,7 @@ int serverMain(int argc, char** argv)
 	}
 
 	fd_set clients;
-	clients.fd_count = 0;
+	FD_ZERO(&clients);
 	
 	timer_t nextTimestampUpdateAt = 0.0f;
 	timer_t nextTimestampBroadcastAt = 0.0f;
@@ -96,11 +122,11 @@ int serverMain(int argc, char** argv)
 	while (!terminateServer) {
 		const timer_t now = getHighPrecisionTime();
 
-		printf("now: %f\n", now);
+		printf("now: %f\n", getTime(timerState));
 
 		fd_set readFs;
-		readFs.fd_array[0] = serverSocket;
-		readFs.fd_count = 1;
+		FD_ZERO(&readFs);
+		FD_SET(serverSocket, &readFs);
 
 		struct timeval timeout;
 		timeout.tv_sec = 0;
@@ -115,8 +141,7 @@ int serverMain(int argc, char** argv)
 				}
 			}
 			else {
-				clients.fd_array[clients.fd_count] = clientSocket;
-				clients.fd_count++;
+				FD_SET(clientSocket, &clients);
 				printf("client accepted, now %d clients\n", clients.fd_count);
 				if (clients.fd_count > FD_SETSIZE) {
 					puts("maximum client size reached");
@@ -142,16 +167,13 @@ int serverMain(int argc, char** argv)
 		}
 
 		packet->type = PACKETTYPE_SOUND;
-		packet->playTime = getTime(timerState) + PLAY_DELAY;
-		puts("reading stream");
 		const PaError error = Pa_ReadStream(paStream, packet->samples, FRAMES_PER_PACKET);
 		if (error != paNoError) {
 			printf("Pa_ReadStream failed with code: %d\n", error);
 		}
+		packet->playTime = getTime(timerState) + PLAY_DELAY;
 		packet->size = sizeof(SoundPacket);
-		puts("broadcasting");
 		broadcast(&clients, (const char*)packet, packet->size, 0);
-		puts("done");
 		// -> falls Client disconnected, hole Mutex und entferne aus Liste (das wird Scheiﬂe, weil das ein Array ist... Schieberei?)
 
 		

@@ -19,7 +19,7 @@ typedef struct {
 	unsigned int size;
 	PacketType type;
 	timer_t playTime;
-	sample_t samples[AUDIO_BUFFER_SIZE];
+	unsigned char samples[AUDIO_BUFFER_SIZE];
 } SoundPacket;
 
 typedef struct {

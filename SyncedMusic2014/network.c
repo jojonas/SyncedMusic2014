@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+
 SOCKET setupListeningSocket(const unsigned short port)
 {
 	int iResult;
@@ -107,6 +108,16 @@ SOCKET setupConnection(const char* host, const int port)
 	if (clientSocket == INVALID_SOCKET) {
 		printf("Error at socket(): %d\n", WSAGetLastError());
 		freeaddrinfo(result);
+		WSACleanup();
+		return INVALID_SOCKET;
+	}
+
+	u_long iMode = 0; // blocking: 0, nonblocking: 1
+	iResult = ioctlsocket(clientSocket, FIONBIO, &iMode);
+	if (iResult != NO_ERROR) {
+		printf("ioctlsocket failed with error: %d\n", iResult);
+		freeaddrinfo(result);
+		closesocket(clientSocket);
 		WSACleanup();
 		return INVALID_SOCKET;
 	}
