@@ -31,5 +31,6 @@ typedef struct {
 
 SOCKET setupListeningSocket(const unsigned short port);
 SOCKET setupConnection(const char* host, const int port);
+void closeSocket(SOCKET socket);
 
 #endif // NETWORK_H

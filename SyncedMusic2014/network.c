@@ -132,3 +132,20 @@ SOCKET setupConnection(const char* host, const int port)
 	}
 	return clientSocket;
 }
+
+void closeSocket(SOCKET socket)
+{
+	char buffer[1024];
+	if (socket != INVALID_SOCKET) {
+		shutdown(socket, SD_SEND);
+		int bytesReceived;
+		do {
+			bytesReceived = recv(socket, buffer, 1024, 0);
+			if (bytesReceived == SOCKET_ERROR) {
+				puts("graceful socket shutdown failed");
+				break;
+			}
+		} while (bytesReceived != 0);
+	}
+	closesocket(socket);
+}
