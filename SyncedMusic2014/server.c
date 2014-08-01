@@ -16,26 +16,19 @@
 
 volatile BOOL terminateServer;
 
-typedef struct {
-	fd_set* clients;
-	HANDLE clientsMutex;
-	SOCKET serverSocket;
-	volatile BOOL terminate;
-} ServerNetState;
-
-
-typedef struct Queue {
+typedef struct QueueElement {
 	void* payload;
 	size_t length;
-	struct Queue* next;
-} Queue;
+	struct QueueElement* next;
+} QueueElement;
 
 
 typedef struct {
-	Queue** head;
+	QueueElement** head;
 	HANDLE mutex;
 	SOCKET socket;
 	BOOL terminate;
+	BOOL join;
 } QueueWorkerState;
 
 void broadcast(fd_set* clients, const char* const data, const int length, const int flags) {
@@ -68,16 +61,31 @@ DWORD WINAPI workerThread(void* param) {
 	QueueWorkerState* state = (QueueWorkerState*)param;
 	SOCKET socket = state->socket;
 	while (!state->terminate) {
-		void* packet = state->head->payload;
-		send(socket, packet, state->head->length, 0);
+		QueueElement* queueElement = *state->head;
 
-		DWORD waitResult = WaitForSingleObject(ghMutex, INFINITE);
-		if (waitResult == WAIT_OBJECT_0) {
-			state->head = state->head->next;
+		void* packet = queueElement->payload;
+		const int sendResult = send(socket, packet, queueElement->length, 0);
+		if (sendResult == queueElement->length) {
+			DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
+			if (waitResult == WAIT_OBJECT_0) {
+				(*state->head) = queueElement->next;
+				free(queueElement->payload);
+				free(queueElement);
+			}
+			else {
+				printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
+				return 1;
+			}
+			ReleaseMutex(state->mutex);
 		}
-		else {
-			printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
-			return 1;
+		else if (sendResult == SOCKET_ERROR) {
+			const int error = WSAGetLastError();
+			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
+				printf("client disconnected, now %d clients\n", clients->fd_count);
+			}
+			else {
+				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
+			}
 		}
 	}
 	return 0;
