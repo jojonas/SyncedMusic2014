@@ -20,13 +20,13 @@ volatile BOOL terminateServer;
 
 typedef struct QueueElement {
 	void* payload;
-	size_t length;
+	int length;
 	struct QueueElement* next;
 } QueueElement;
 
 
 typedef struct {
-	QueueElement** head;
+	QueueElement* head;
 	HANDLE mutex;
 	SOCKET socket;
 	BOOL terminate;
@@ -38,22 +38,31 @@ typedef struct {
 	HANDLE threadHandle;
 } ClientData;
 
-void broadcast(fd_set* clients, const char* const data, const int length, const int flags) {
-	for (unsigned int clientIndex = 0; clientIndex < clients->fd_count; clientIndex++) {
-		SOCKET clientSocket = clients->fd_array[clientIndex];
-		const int sendResult = send(clientSocket, data, length, flags);
-		if (sendResult == SOCKET_ERROR) {
-			const int error = WSAGetLastError();
-			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
-				FD_CLR(clientSocket, clients);
-				printf("client disconnected, now %d clients\n", clients->fd_count);
+void broadcast(ClientData* clientData, char* data, const int length) {
+	for (unsigned int clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++) {
+		QueueWorkerState* state = clientData[clientIndex].workerState;
+		if (state) {
+			QueueElement* queueElement = malloc(sizeof(QueueElement));
+			queueElement->payload = data;
+			queueElement->length = length;
+			queueElement->next = NULL;
+			DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
+			if (waitResult == WAIT_OBJECT_0) {
+				QueueElement* current = state->head;
+				if (state->head) {
+					while (current->next) {
+						current = current->next;
+					}
+					current->next = queueElement;
+				}
+				else {
+					state->head = queueElement;
+				}
+				ReleaseMutex(state->mutex);
 			}
 			else {
-				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
+				printf("acquiring mutex failed with error: %d\n", waitResult);
 			}
-		}
-		else if (sendResult < length) {
-			printf("broadcast send did not transmit entire packet (%d of %d bytes transmitted)\n", sendResult, length);
 		}
 	}
 }
@@ -68,33 +77,37 @@ DWORD WINAPI workerThread(void* param) {
 	QueueWorkerState* state = (QueueWorkerState*)param;
 	SOCKET socket = state->socket;
 	while (!state->terminate) {
-		QueueElement* queueElement = *state->head;
-		
-		void* packet = queueElement->payload;
-		const int sendResult = send(socket, packet, queueElement->length, 0);
-		if (sendResult == queueElement->length) {
-			DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
-			if (waitResult == WAIT_OBJECT_0) {
-				(*state->head) = queueElement->next;
-				free(queueElement->payload);
-				free(queueElement);
-			}
-			else {
-				printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
-			}
-			ReleaseMutex(state->mutex);
+		QueueElement* queueElement = state->head;
+		if (queueElement == 0) {
+			SwitchToThread();
 		}
-		else if (sendResult == SOCKET_ERROR) {
-			const int error = WSAGetLastError();
-			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
-				printf("client disconnected\n");
+		else {
+			void* packet = queueElement->payload;
+			const int sendResult = send(socket, packet, queueElement->length, 0);
+			if (sendResult == queueElement->length) {
 				DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
-				state->join = TRUE;
-				state->terminate = TRUE;
+				if (waitResult == WAIT_OBJECT_0) {
+					state->head = queueElement->next;
+					free(queueElement->payload);
+					free(queueElement);
+				}
+				else {
+					printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
+				}
 				ReleaseMutex(state->mutex);
 			}
-			else {
-				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), queueElement->length);
+			else if (sendResult == SOCKET_ERROR) {
+				const int error = WSAGetLastError();
+				if (error == WSAECONNRESET || error == WSAECONNABORTED) {
+					printf("client disconnected\n");
+					DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
+					state->join = TRUE;
+					state->terminate = TRUE;
+					ReleaseMutex(state->mutex);
+				}
+				else {
+					printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), queueElement->length);
+				}
 			}
 		}
 	}
@@ -102,11 +115,12 @@ DWORD WINAPI workerThread(void* param) {
 }
 
 void deleteClientData(ClientData* cData) {
-	WaitForSingleObject(cData->threadHandle);
+	WaitForSingleObject(cData->threadHandle, INFINITE);
 	CloseHandle(cData->workerState->mutex);
 	closeSocket(cData->workerState->socket);
 	CloseHandle(cData->threadHandle);
-	QueueElement* current = *(cData->workerState->head);
+	cData->threadHandle = NULL;
+	QueueElement* current = cData->workerState->head;
 	while (current) {
 		QueueElement* next = current->next;
 		free(current->payload);
@@ -115,6 +129,7 @@ void deleteClientData(ClientData* cData) {
 	}
 	free(cData->workerState->head);
 	free(cData->workerState);
+	cData->workerState = NULL;
 }
 
 
@@ -199,8 +214,7 @@ int serverMain(int argc, char** argv)
 				clientData[nextClientIndex].workerState->socket = clientSocket;
 				clientData[nextClientIndex].workerState->terminate = FALSE;
 				clientData[nextClientIndex].workerState->join = FALSE;
-				clientData[nextClientIndex].workerState->head = malloc(sizeof(QueueElement*));
-				*(clientData[nextClientIndex].workerState->head) = 0;
+				clientData[nextClientIndex].workerState->head = 0;
 
 				clientData[nextClientIndex].threadHandle = CreateThread(NULL, 0, workerThread, clientData[nextClientIndex].workerState, 0, NULL);
 				nextClientIndex = (nextClientIndex + 1) % MAX_CLIENTS;
@@ -220,7 +234,7 @@ int serverMain(int argc, char** argv)
 			packet.type = PACKETTYPE_TIMESTAMP;
 			packet.size = sizeof(packet);
 			packet.time = getTime(timerState);
-			broadcast(&clientSockets, (const char*)&packet, packet.size, 0);
+			broadcast(clientData, (char*)&packet, packet.size);
 
 			nextTimestampBroadcastAt = now + randf(TIMESTAMP_BROADCAST_LOWER, TIMESTAMP_BROADCAST_UPPER);
 		}
@@ -232,12 +246,12 @@ int serverMain(int argc, char** argv)
 		}
 		packet->playTime = getTime(timerState) + PLAY_DELAY;
 		packet->size = sizeof(SoundPacket);
-		broadcast(&clientSockets, (const char*)packet, packet->size, 0);
+		broadcast(clientData, (char*)packet, packet->size);
 		// -> falls Client disconnected, hole Mutex und entferne aus Liste (das wird Scheiﬂe, weil das ein Array ist... Schieberei?)
 
 		for (int i = 0; i < MAX_CLIENTS; ++i) {
 			if (clientData[i].workerState) {
-				WaitForSingleObject(clientData[i].workerState->mutex);
+				WaitForSingleObject(clientData[i].workerState->mutex, INFINITE);
 				if (clientData[i].workerState->join)
 					deleteClientData(clientData + i);
 				ReleaseMutex(clientData[i].workerState->mutex);
