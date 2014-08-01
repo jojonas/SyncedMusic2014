@@ -68,16 +68,31 @@ DWORD WINAPI workerThread(void* param) {
 	QueueWorkerState* state = (QueueWorkerState*)param;
 	SOCKET socket = state->socket;
 	while (!state->terminate) {
-		void* packet = state->head->payload;
-		send(socket, packet, state->head->length, 0);
-
-		DWORD waitResult = WaitForSingleObject(ghMutex, INFINITE);
-		if (waitResult == WAIT_OBJECT_0) {
-			state->head = state->head->next;
+		QueueElement* queueElement = *state->head;
+		
+		void* packet = queueElement->payload;
+		const int sendResult = send(socket, packet, queueElement->length, 0);
+		if (sendResult == queueElement->length) {
+			DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
+			if (waitResult == WAIT_OBJECT_0) {
+				(*state->head) = queueElement->next;
+				free(queueElement->payload);
+				free(queueElement);
+			}
+			else {
+				printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
+				return 1;
+			}
+			ReleaseMutex(state->mutex);
 		}
-		else {
-			printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
-			return 1;
+		else if (sendResult == SOCKET_ERROR) {
+			const int error = WSAGetLastError();
+			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
+				printf("client disconnected, now %d clients\n", clients->fd_count);
+			}
+			else {
+				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
+			}
 		}
 	}
 	return 0;
@@ -122,7 +137,7 @@ int serverMain(int argc, char** argv)
 		clientData[i].threadHandle = 0;
 	}
 	int nextClientIndex = 0;
-
+	
 	timer_t nextTimestampUpdateAt = 0.0f;
 	timer_t nextTimestampBroadcastAt = 0.0f;
 
@@ -130,7 +145,7 @@ int serverMain(int argc, char** argv)
 	const PaDeviceIndex defaultInputDevice = Pa_GetDefaultInputDevice();
 	PaStream* paStream = setupStream(defaultInputDevice, -1);
 
-
+	
 	signal(SIGINT, ctrlCServerHandler);
 	while (!terminateServer) {
 		const timer_t now = getHighPrecisionTime();
@@ -207,7 +222,7 @@ int serverMain(int argc, char** argv)
 			}
 		}
 	}
-
+		
 	for (int i = 0; i < MAX_CLIENTS; ++i) {
 		if (clientData[i].workerState)
 			clientData[i].workerState->terminate = TRUE;
