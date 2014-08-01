@@ -1,5 +1,6 @@
 #include "server.h" 
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
 #include <time.h>
