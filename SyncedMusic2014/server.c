@@ -47,7 +47,8 @@ void broadcast(fd_set* clients, const char* const data, const int length, const 
 			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
 				FD_CLR(clientSocket, clients);
 				printf("client disconnected, now %d clients\n", clients->fd_count);
-			} else {
+			}
+			else {
 				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
 			}
 		}
@@ -65,15 +66,21 @@ float randf(const float min, const float max) {
 
 DWORD WINAPI workerThread(void* param) {
 	QueueWorkerState* state = (QueueWorkerState*)param;
-	SOCKET socket = NULL;
-	Queue* currentPacket;
-	while (!end) {
-		void* packet = currentPacket->payload;
-		
-		send(socket, packet, currentPacket->length, 0);
+	SOCKET socket = state->socket;
+	while (!state->terminate) {
+		void* packet = state->head->payload;
+		send(socket, packet, state->head->length, 0);
 
-		currentPacket = currentPacket->next;
+		DWORD waitResult = WaitForSingleObject(ghMutex, INFINITE);
+		if (waitResult == WAIT_OBJECT_0) {
+			state->head = state->head->next;
+		}
+		else {
+			printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
+			return 1;
+		}
 	}
+	return 0;
 }
 
 
@@ -109,7 +116,7 @@ int serverMain(int argc, char** argv)
 
 	fd_set clients;
 	FD_ZERO(&clients);
-	
+
 	timer_t nextTimestampUpdateAt = 0.0f;
 	timer_t nextTimestampBroadcastAt = 0.0f;
 
@@ -117,7 +124,7 @@ int serverMain(int argc, char** argv)
 	const PaDeviceIndex defaultInputDevice = Pa_GetDefaultInputDevice();
 	PaStream* paStream = setupStream(defaultInputDevice, -1);
 
-	
+
 	signal(SIGINT, ctrlCServerHandler);
 	while (!terminateServer) {
 		const timer_t now = getHighPrecisionTime();
@@ -146,6 +153,15 @@ int serverMain(int argc, char** argv)
 				if (clients.fd_count > FD_SETSIZE) {
 					puts("maximum client size reached");
 				}
+
+				QueueWorkerState* workerState = malloc(sizeof(QueueWorkerState));
+				workerState->mutex = CreateMutex(NULL, 0, NULL);
+				workerState->socket = clientSocket;
+				workerState->terminate = FALSE;
+				workerState->head = malloc(sizeof(QueueElement*));
+				*(workerState->head) = 0;
+
+				HANDLE clientWorkerThread = CreateThread(NULL, 0, workerThread, workerState,
 			}
 		}
 
@@ -176,7 +192,7 @@ int serverMain(int argc, char** argv)
 		broadcast(&clients, (const char*)packet, packet->size, 0);
 		// -> falls Client disconnected, hole Mutex und entferne aus Liste (das wird Scheiße, weil das ein Array ist... Schieberei?)
 
-		
+
 	}
 
 	Pa_AbortStream(paStream);

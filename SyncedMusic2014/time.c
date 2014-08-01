@@ -27,7 +27,6 @@ void updateLinearRegression(TimerState* const timerState) {
 
 // === PUBLIC ===
 
-// test
 
 timer_t getHighPrecisionTime() {
 	LARGE_INTEGER performanceCounter;
