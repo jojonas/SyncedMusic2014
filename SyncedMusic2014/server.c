@@ -81,17 +81,20 @@ DWORD WINAPI workerThread(void* param) {
 			}
 			else {
 				printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
-				return 1;
 			}
 			ReleaseMutex(state->mutex);
 		}
 		else if (sendResult == SOCKET_ERROR) {
 			const int error = WSAGetLastError();
 			if (error == WSAECONNRESET || error == WSAECONNABORTED) {
-				printf("client disconnected, now %d clients\n", clients->fd_count);
+				printf("client disconnected\n");
+				DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
+				state->join = TRUE;
+				state->terminate = TRUE;
+				ReleaseMutex(state->mutex);
 			}
 			else {
-				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), length);
+				printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), queueElement->length);
 			}
 		}
 	}
