@@ -122,7 +122,10 @@ SOCKET setupConnection(const char* host, const int port)
 		return INVALID_SOCKET;
 	}
 
-	DWORD recvTimeout = 2500; // ms
+	struct timeval recvTimeout;
+	recvTimeout.tv_sec = 2;
+	recvTimeout.tv_usec = 0;
+
 	iResult = setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char *)&recvTimeout, sizeof(recvTimeout));
 	if (iResult == SOCKET_ERROR) {
 		printf("setsockopt for SO_RCVTIMEO failed with error: %u\n", WSAGetLastError());
