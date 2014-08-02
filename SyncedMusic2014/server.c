@@ -282,6 +282,7 @@ int serverMain(int argc, char** argv)
 			if (clientData[i].workerState) {
 				WaitForSingleObject(clientData[i].workerState->mutex, INFINITE);
 				if (clientData[i].workerState->join) {
+					FD_CLR(clientData[i].workerState->socket, &clientSockets);
 					deleteClientData(clientData + i);
 				}
 				else {
