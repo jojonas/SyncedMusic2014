@@ -119,6 +119,8 @@ int clientMain(int argc, char** argv)
 					while (!terminateClient && clientSocket == INVALID_SOCKET) {
 						printf("reconnecting to %s...\n", serverAddress);
 						clientSocket = setupConnection(serverAddress, SERVER_PORT);
+						timerState->full = 0;
+						timerState->nextPoint = 0;
 					}
 					continue;
 				}
@@ -142,6 +144,8 @@ int clientMain(int argc, char** argv)
 				while (!terminateClient && clientSocket == INVALID_SOCKET) {
 					printf("reconnecting to %s...\n", serverAddress);
 					clientSocket = setupConnection(serverAddress, SERVER_PORT);
+					timerState->full = 0;
+					timerState->nextPoint = 0;
 				}
 				dataEndIndex = 0;
 				lastReceive = clock();
