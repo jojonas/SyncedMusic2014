@@ -73,12 +73,15 @@ timer_t getTime(TimerState* const timerState) //TODO: ponder if mutexing could b
 		}
 
 		const timer_t highPrecisionTime = getHighPrecisionTime();
-		return timerState->slope * highPrecisionTime + timerState->offset;
+		timer_t t = timerState->slope * highPrecisionTime + timerState->offset;
+		ReleaseMutex(timerState->mutex);
+		return t;
 	}
 	else {
 		puts("mutex for timerstate in getTime could not be acquired. Returning zero (hell breaks lose).");
 		return 0.0;
 	}
+	
 }
 
 void updateTimer(TimerState* const timerState, const timer_t lowPrecisionTime)
@@ -97,6 +100,7 @@ void updateTimer(TimerState* const timerState, const timer_t lowPrecisionTime)
 	else {
 		puts("mutex for timerstate in updateTimer could not be acquired. Returning zero (hell breaks lose).");
 	}
+	ReleaseMutex(timerState->mutex);
 }
 
 
