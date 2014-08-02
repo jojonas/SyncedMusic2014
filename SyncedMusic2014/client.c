@@ -121,6 +121,7 @@ int clientMain(int argc, char** argv)
 						clientSocket = setupConnection(serverAddress, SERVER_PORT);
 						timerState->full = 0;
 						timerState->nextPoint = 0;
+						timerState->dirty = 1;
 					}
 					continue;
 				}
@@ -146,6 +147,7 @@ int clientMain(int argc, char** argv)
 					clientSocket = setupConnection(serverAddress, SERVER_PORT);
 					timerState->full = 0;
 					timerState->nextPoint = 0;
+					timerState->dirty = 1;
 				}
 				dataEndIndex = 0;
 				lastReceive = clock();

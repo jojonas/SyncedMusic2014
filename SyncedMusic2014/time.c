@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define TIMER_DEVIATION_THRESHOLD 20E-3
+#define TIMER_DEVIATION_THRESHOLD 3600
 
 // === PRIVATE ===
 
@@ -72,6 +72,7 @@ timer_t getTime(TimerState* const timerState) //TODO: ponder if mutexing could b
 	DWORD waitResult = WaitForSingleObject(timerState->mutex, INFINITE);
 	if (waitResult == WAIT_OBJECT_0) {
 		if (timerState->dirty) {
+			puts("updating linreg");
 			updateLinearRegression(timerState);
 			timerState->dirty = 0;
 		}
