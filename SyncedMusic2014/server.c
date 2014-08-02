@@ -208,6 +208,21 @@ int serverMain(int argc, char** argv)
 
 		printf("now: %f\n", getTime(timerState));
 
+		int clientCount = 0;
+		for (int i = 0; i < MAX_CLIENTS; ++i) {
+			if (clientData[i].workerState) {
+				QueueElement* current = clientData[i].workerState->head;
+				int queueLength = 0;
+				while (current) {
+					current = current->next;
+					queueLength++;
+				}
+				clientCount++;
+				printf("client queue %d: %d items\n", clientCount, queueLength);
+			}
+		}
+		printf("workers: %d\n", clientCount);
+
 		fd_set readFs;
 		FD_ZERO(&readFs);
 		FD_SET(serverSocket, &readFs);
