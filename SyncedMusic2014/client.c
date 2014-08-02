@@ -49,7 +49,7 @@ int clientMain(int argc, char** argv)
 	}
 
 	while (!terminateClient && clientSocket == INVALID_SOCKET) {
-		printf("connecting to %s...", serverAddress);
+		printf("connecting to %s...\n", serverAddress);
 		clientSocket = setupConnection(serverAddress, SERVER_PORT);
 	}
 
@@ -99,7 +99,7 @@ int clientMain(int argc, char** argv)
 
 					clientSocket = INVALID_SOCKET;
 					while (!terminateClient && clientSocket == INVALID_SOCKET) {
-						printf("reconnecting to %s...", serverAddress);
+						printf("reconnecting to %s...\n", serverAddress);
 						clientSocket = setupConnection(serverAddress, SERVER_PORT);
 					}
 					continue;
@@ -122,7 +122,7 @@ int clientMain(int argc, char** argv)
 				puts("client timeout");
 				clientSocket = INVALID_SOCKET;
 				while (!terminateClient && clientSocket == INVALID_SOCKET) {
-					printf("reconnecting to %s...", serverAddress);
+					printf("reconnecting to %s...\n", serverAddress);
 					clientSocket = setupConnection(serverAddress, SERVER_PORT);
 				}
 				dataEndIndex = 0;

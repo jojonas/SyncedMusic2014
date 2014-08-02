@@ -71,6 +71,8 @@ SOCKET setupListeningSocket(const unsigned short port)
 		return INVALID_SOCKET;
 	}
 
+	puts("server listen complete.");
+
 	return serverSocket;
 }
 
@@ -143,6 +145,9 @@ SOCKET setupConnection(const char* host, const int port)
 		WSACleanup();
 		return INVALID_SOCKET;
 	}
+
+	puts("client connect complete.");
+
 	return clientSocket;
 }
 

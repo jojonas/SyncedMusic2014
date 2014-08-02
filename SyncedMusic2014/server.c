@@ -108,7 +108,7 @@ DWORD WINAPI workerThread(void* param) {
 			SwitchToThread();
 		}
 		else {
-			TimestampPacket* packet = queueElement->payload;
+				TimestampPacket* packet = queueElement->payload;
 			if (packet->type == PACKETTYPE_TIMESTAMP) {
 				packet->time = getTime(state->timerState);
 			}
