@@ -17,17 +17,18 @@
 
 #define MAX_CLIENTS 16
 
-/*
+
 #define free(x) {printf("Freeing object %s at %p in file %s line %d\n", #x, x, __FILE__, __LINE__); fflush(stdout); free(x);}
 
 void* jj_malloc(size_t size, char* objectname, char* file, int line) {
 	void* p = malloc(size);
 	printf("Mallocing object %s at %p in file %s line %d\n", objectname, p, file, line);
 	fflush(stdout);
+	ZeroMemory(p, size);
 	return p;
 }
 #define malloc(x) jj_malloc(x, #x, __FILE__, __LINE__)
-*/
+
 
 volatile BOOL terminateServer;
 

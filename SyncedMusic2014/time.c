@@ -53,6 +53,8 @@ TimerState* createTimer()
 	timerState->nextPoint = 0;
 	timerState->dirty = 1;
 	timerState->full = 0;
+	timerState->slope = 1;
+	timerState->offset = 0;
 	return timerState;
 }
 

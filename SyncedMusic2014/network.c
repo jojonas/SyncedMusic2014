@@ -128,7 +128,7 @@ SOCKET setupConnection(const char* host, const int port)
 
 	iResult = setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char *)&recvTimeout, sizeof(recvTimeout));
 	if (iResult == SOCKET_ERROR) {
-		printf("setsockopt for SO_RCVTIMEO failed with error: %u\n", WSAGetLastError());
+		printf("setsockopt for SO_RCVTIMEO failed with error: %d\n", WSAGetLastError());
 		closesocket(clientSocket);
 		freeaddrinfo(result);
 		WSACleanup();

@@ -175,11 +175,6 @@ int clientMain(int argc, char** argv)
 
 		timer_t waitUntilPlay = head ? head->playAt - getTime(timerState) : 1.0;
 		if (waitUntilPlay <= 0.0) { // packet in front of queue is (over)due
-			/*PaError error = Pa_WriteStream(paStream, head->samples, FRAMES_PER_PACKET); // doesn't block!
-			if (error != paNoError) {
-				printf("Pa_WriteStream failed with error: %d\n", error);
-			}*/
-
 			int droppedFrames = (int)(-waitUntilPlay*SAMPLE_RATE);
 			printf("wait: %f ms, dropped frames: %d, left: %d\n", waitUntilPlay*1000.0, droppedFrames, FRAMES_PER_PACKET - droppedFrames);
 			unsigned char* samplesStart = (unsigned char*)head->samples + NUM_CHANNELS*BYTES_PER_SAMPLE*droppedFrames;
