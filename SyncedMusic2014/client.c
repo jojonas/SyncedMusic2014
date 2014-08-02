@@ -207,16 +207,18 @@ shutdown:
 	Pa_CloseStream(paStream);
 	Pa_Terminate();
 
+	
 	shutdown(clientSocket, SD_SEND);
-
-	int bytesReceived;
-	do {
-		bytesReceived = recv(clientSocket, buffer, NETWORK_BUFFER_SIZE, 0);
-		if (bytesReceived == SOCKET_ERROR) {
-			puts("graceful socket shutdown failed");
-			break;
-		}
-	} while (bytesReceived != 0);
+	if (buffer) {
+		int bytesReceived;
+		do {
+			bytesReceived = recv(clientSocket, buffer, NETWORK_BUFFER_SIZE, 0);
+			if (bytesReceived == SOCKET_ERROR) {
+				puts("graceful socket shutdown failed");
+				break;
+			}
+		} while (bytesReceived != 0);
+	}
 	closesocket(clientSocket);
 
 	free(timerState);

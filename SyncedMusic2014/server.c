@@ -17,6 +17,18 @@
 
 #define MAX_CLIENTS 16
 
+/*
+#define free(x) {printf("Freeing object %s at %p in file %s line %d\n", #x, x, __FILE__, __LINE__); fflush(stdout); free(x);}
+
+void* jj_malloc(size_t size, char* objectname, char* file, int line) {
+	void* p = malloc(size);
+	printf("Mallocing object %s at %p in file %s line %d\n", objectname, p, file, line);
+	fflush(stdout);
+	return p;
+}
+#define malloc(x) jj_malloc(x, #x, __FILE__, __LINE__)
+*/
+
 volatile BOOL terminateServer;
 
 typedef struct QueueElement {
@@ -44,7 +56,12 @@ void broadcast(ClientData* clientData, char* data, const int length) {
 		QueueWorkerState* state = clientData[clientIndex].workerState;
 		if (state) {
 			QueueElement* queueElement = malloc(sizeof(QueueElement));
-			queueElement->payload = data;
+			if (!queueElement) {
+				printf("could not allocate memory for queue element.\n");
+				continue;
+			}
+			queueElement->payload = malloc(length);
+			memcpy(queueElement->payload, data, length);
 			queueElement->length = length;
 			queueElement->next = NULL;
 			DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
@@ -62,7 +79,7 @@ void broadcast(ClientData* clientData, char* data, const int length) {
 				ReleaseMutex(state->mutex);
 			}
 			else {
-				printf("acquiring mutex failed with error: %d\n", waitResult);
+				printf("acquiring mutex failed with error: %u\n", waitResult);
 			}
 		}
 	}
@@ -83,8 +100,7 @@ DWORD WINAPI workerThread(void* param) {
 			SwitchToThread();
 		}
 		else {
-			void* packet = queueElement->payload;
-			const int sendResult = send(socket, packet, queueElement->length, 0);
+			const int sendResult = send(socket, queueElement->payload, queueElement->length, 0);
 			if (sendResult == queueElement->length) {
 				DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
 				if (waitResult == WAIT_OBJECT_0) {
@@ -93,7 +109,7 @@ DWORD WINAPI workerThread(void* param) {
 					free(queueElement);
 				}
 				else {
-					printf("acquiring client worker queue mutex failed with error: %d\n", waitResult);
+					printf("acquiring client worker queue mutex failed with error: %u\n", waitResult);
 				}
 				ReleaseMutex(state->mutex);
 			}
@@ -150,8 +166,8 @@ int serverMain(int argc, char** argv)
 
 	terminateServer = FALSE;
 
-	SoundPacket* packet = malloc(sizeof(SoundPacket));
-	if (!packet) {
+	SoundPacket* soundPacket = malloc(sizeof(SoundPacket));
+	if (!soundPacket) {
 		puts("could not allocate memory for sound packet");
 		return 1;
 	}
@@ -204,22 +220,35 @@ int serverMain(int argc, char** argv)
 				}
 			}
 			else {
-				FD_SET(clientSocket, &clientSockets);
-				printf("client accepted, now %d clients\n", clientSockets.fd_count);
-				if (clientSockets.fd_count > FD_SETSIZE) {
-					puts("maximum client size reached");
-				}
-
 				clientData[nextClientIndex].workerState = malloc(sizeof(QueueWorkerState));
-				clientData[nextClientIndex].workerState->mutex = CreateMutex(NULL, 0, NULL);
-				clientData[nextClientIndex].workerState->socket = clientSocket;
-				clientData[nextClientIndex].workerState->terminate = FALSE;
-				clientData[nextClientIndex].workerState->join = FALSE;
-				clientData[nextClientIndex].workerState->head = 0;
+				if (clientData[nextClientIndex].workerState) {
 
-				clientData[nextClientIndex].threadHandle = CreateThread(NULL, 0, workerThread, clientData[nextClientIndex].workerState, 0, NULL);
-				nextClientIndex = (nextClientIndex + 1) % MAX_CLIENTS;
-				// TODO: Deleting clients and joining threads upon execution
+					clientData[nextClientIndex].workerState->mutex = CreateMutex(NULL, 0, NULL);
+
+					if (clientData[nextClientIndex].workerState->mutex) {
+						FD_SET(clientSocket, &clientSockets);
+						printf("client accepted, now %u clients\n", clientSockets.fd_count);
+						if (clientSockets.fd_count > FD_SETSIZE) {
+							puts("maximum client size reached");
+						}
+
+						clientData[nextClientIndex].workerState->socket = clientSocket;
+						clientData[nextClientIndex].workerState->terminate = FALSE;
+						clientData[nextClientIndex].workerState->join = FALSE;
+						clientData[nextClientIndex].workerState->head = 0;
+
+						clientData[nextClientIndex].threadHandle = CreateThread(NULL, 0, workerThread, clientData[nextClientIndex].workerState, 0, NULL);
+						nextClientIndex = (nextClientIndex + 1) % MAX_CLIENTS;
+					}
+					else {
+						puts("could not create mutex for queue worker state.");
+						free(clientData[nextClientIndex].workerState);
+						clientData[nextClientIndex].workerState = NULL;
+					}
+				}
+				else{
+					puts("could not allocate memory queue worker state.");
+				}
 			}
 		}
 
@@ -231,23 +260,23 @@ int serverMain(int argc, char** argv)
 		}
 
 		if (now > nextTimestampBroadcastAt) {
-			TimestampPacket packet;
-			packet.type = PACKETTYPE_TIMESTAMP;
-			packet.size = sizeof(packet);
-			packet.time = getTime(timerState);
-			broadcast(clientData, (char*)&packet, packet.size);
+			TimestampPacket timestampPacket;
+			timestampPacket.type = PACKETTYPE_TIMESTAMP;
+			timestampPacket.size = sizeof(timestampPacket);
+			timestampPacket.time = getTime(timerState);
+			broadcast(clientData, (char*)&timestampPacket, timestampPacket.size);
 
 			nextTimestampBroadcastAt = now + randf(TIMESTAMP_BROADCAST_LOWER, TIMESTAMP_BROADCAST_UPPER);
 		}
 
-		packet->type = PACKETTYPE_SOUND;
-		const PaError error = Pa_ReadStream(paStream, packet->samples, FRAMES_PER_PACKET);
+		soundPacket->type = PACKETTYPE_SOUND;
+		const PaError error = Pa_ReadStream(paStream, soundPacket->samples, FRAMES_PER_PACKET);
 		if (error != paNoError) {
 			printf("Pa_ReadStream failed with code: %d\n", error);
 		}
-		packet->playTime = getTime(timerState) + PLAY_DELAY;
-		packet->size = sizeof(SoundPacket);
-		broadcast(clientData, (char*)packet, packet->size);
+		soundPacket->playTime = getTime(timerState) + PLAY_DELAY;
+		soundPacket->size = sizeof(SoundPacket);
+		broadcast(clientData, (char*)soundPacket, soundPacket->size);
 		// -> falls Client disconnected, hole Mutex und entferne aus Liste (das wird Scheiße, weil das ein Array ist... Schieberei?)
 
 		for (int i = 0; i < MAX_CLIENTS; ++i) {
@@ -275,6 +304,7 @@ int serverMain(int argc, char** argv)
 	closesocket(serverSocket);
 
 	free(timerState);
+	free(soundPacket);
 
 	return 0;
 }
