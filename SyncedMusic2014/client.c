@@ -24,6 +24,24 @@ typedef struct AudioQueue {
 	struct AudioQueue* next;
 } AudioQueue;
 
+void setConsoleColor(WORD attribute) {
+	static HANDLE console = 0;
+	static WORD savedAttributes;
+
+	if (console == 0) {
+		console = GetStdHandle(STD_OUTPUT_HANDLE);
+		CONSOLE_SCREEN_BUFFER_INFO consoleInfo;
+		GetConsoleScreenBufferInfo(console, &consoleInfo);
+		savedAttributes = consoleInfo.wAttributes;
+	}
+	if (attribute) {
+		SetConsoleTextAttribute(console, attribute);
+	}
+	else {
+		SetConsoleTextAttribute(console, savedAttributes);
+	}
+}
+
 int clientMain(int argc, char** argv)
 {
 	assert(AUDIO_BUFFER_SIZE <= NETWORK_BUFFER_SIZE);
@@ -141,7 +159,9 @@ int clientMain(int argc, char** argv)
 			case PACKETTYPE_TIMESTAMP: 
 				{
 					TimestampPacket* packet = (TimestampPacket*)buffer;
+					setConsoleColor(FOREGROUND_RED);
 					updateTimer(timerState, packet->time);
+					setConsoleColor(0);
 				}
 				break;
 			case PACKETTYPE_SOUND:
@@ -191,7 +211,10 @@ int clientMain(int argc, char** argv)
 
 			queueLength--;
 			printf("queueLength: %d\n", queueLength);
+			
+			setConsoleColor(FOREGROUND_GREEN);
 			printf("now: %f\n", getTime(timerState));
+			setConsoleColor(0);
 		}
 	}
 

@@ -1,8 +1,12 @@
 #include "time.h"
 
+#include <math.h>
 #include <Windows.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
+
+#define TIMER_DEVIATION_THRESHOLD 20E-3
 
 // === PRIVATE ===
 
@@ -53,7 +57,7 @@ TimerState* createTimer()
 	timerState->nextPoint = 0;
 	timerState->dirty = 1;
 	timerState->full = 0;
-	timerState->slope = 1;
+	timerState->slope = 0;
 	timerState->offset = 0;
 	timerState->mutex = CreateMutex(NULL, 0, NULL);
 	if (!timerState->mutex) {
@@ -86,16 +90,24 @@ timer_t getTime(TimerState* const timerState) //TODO: ponder if mutexing could b
 
 void updateTimer(TimerState* const timerState, const timer_t lowPrecisionTime)
 {
+	const timer_t expectedTime = getTime(timerState);
 	const timer_t highPrecisionTime = getHighPrecisionTime();
 	DWORD waitResult = WaitForSingleObject(timerState->mutex, INFINITE);
 	if (waitResult == WAIT_OBJECT_0) {
-		timerState->lowPrecisionTimePoints[timerState->nextPoint] = lowPrecisionTime;
-		timerState->highPrecisionTimePoints[timerState->nextPoint] = highPrecisionTime;
-		timerState->nextPoint = (timerState->nextPoint + 1) % TIMER_POINT_COUNT;
-		if (timerState->nextPoint == 0)
-			timerState->full = 1;
+		const timer_t deviation = expectedTime - lowPrecisionTime;
+		printf("deviation: %lf ms\n", deviation*1000.0);
+		if (fabs(deviation) < TIMER_DEVIATION_THRESHOLD || !timerState->full) {
+			timerState->lowPrecisionTimePoints[timerState->nextPoint] = lowPrecisionTime;
+			timerState->highPrecisionTimePoints[timerState->nextPoint] = highPrecisionTime;
+			timerState->nextPoint = (timerState->nextPoint + 1) % TIMER_POINT_COUNT;
+			if (timerState->nextPoint == 0)
+				timerState->full = 1;
 
-		timerState->dirty = 1;
+			timerState->dirty = 1;
+		}
+		else {
+			printf("dropped timestamp packet, should be %f, is %f, delta: %lf\n", expectedTime, lowPrecisionTime, deviation);
+		}
 	}
 	else {
 		puts("mutex for timerstate in updateTimer could not be acquired. Returning zero (hell breaks lose).");
