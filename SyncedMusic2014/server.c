@@ -61,25 +61,31 @@ void broadcast(ClientData* clientData, char* data, const int length) {
 				continue;
 			}
 			queueElement->payload = malloc(length);
-			memcpy(queueElement->payload, data, length);
-			queueElement->length = length;
-			queueElement->next = NULL;
-			DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
-			if (waitResult == WAIT_OBJECT_0) {
-				QueueElement* current = state->head;
-				if (state->head) {
-					while (current->next) {
-						current = current->next;
+			if (queueElement->payload) {
+				memcpy(queueElement->payload, data, length);
+				queueElement->length = length;
+				queueElement->next = NULL;
+				DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
+				if (waitResult == WAIT_OBJECT_0) {
+					QueueElement* current = state->head;
+					if (state->head) {
+						while (current->next) {
+							current = current->next;
+						}
+						current->next = queueElement;
 					}
-					current->next = queueElement;
+					else {
+						state->head = queueElement;
+					}
+					ReleaseMutex(state->mutex);
 				}
 				else {
-					state->head = queueElement;
+					printf("acquiring mutex failed with error: %u\n", waitResult);
 				}
-				ReleaseMutex(state->mutex);
 			}
 			else {
-				printf("acquiring mutex failed with error: %u\n", waitResult);
+				puts("cannot allocate memory for payload copy.");
+				free(queueElement);
 			}
 		}
 	}
@@ -261,7 +267,7 @@ int serverMain(int argc, char** argv)
 		if (now > nextTimestampBroadcastAt) {
 			TimestampPacket timestampPacket;
 			timestampPacket.type = PACKETTYPE_TIMESTAMP;
-			timestampPacket.size = sizeof(timestampPacket);
+			timestampPacket.size = sizeof(TimestampPacket);
 			timestampPacket.time = getTime(timerState);
 			broadcast(clientData, (char*)&timestampPacket, timestampPacket.size);
 
