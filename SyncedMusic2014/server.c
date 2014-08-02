@@ -144,7 +144,6 @@ void deleteClientData(ClientData* cData) {
 		free(current);
 		current = next;
 	}
-	free(cData->workerState->head);
 	free(cData->workerState);
 	cData->workerState = NULL;
 }
