@@ -123,7 +123,7 @@ DWORD WINAPI workerThread(void* param) {
 					ReleaseMutex(state->mutex);
 				}
 				else {
-					printf("broadcast send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), queueElement->length);
+					printf("send failed with error: %d (tried to send %d bytes)\n", WSAGetLastError(), queueElement->length);
 				}
 			}
 		}

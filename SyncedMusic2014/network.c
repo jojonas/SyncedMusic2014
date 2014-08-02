@@ -122,6 +122,16 @@ SOCKET setupConnection(const char* host, const int port)
 		return INVALID_SOCKET;
 	}
 
+	DWORD recvTimeout = 2500; // ms
+	iResult = setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (char *)&recvTimeout, sizeof(recvTimeout));
+	if (iResult == SOCKET_ERROR) {
+		printf("setsockopt for SO_RCVTIMEO failed with error: %u\n", WSAGetLastError());
+		closesocket(clientSocket);
+		freeaddrinfo(result);
+		WSACleanup();
+		return INVALID_SOCKET;
+	}
+
 	iResult = connect(clientSocket, result->ai_addr, (int)result->ai_addrlen);
 	if (iResult == SOCKET_ERROR) {
 		printf("Error at connect: %d\n", WSAGetLastError());
