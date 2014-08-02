@@ -18,7 +18,7 @@
 #define MAX_CLIENTS 16
 
 
-#define free(x) {printf("Freeing object %s at %p in file %s line %d\n", #x, x, __FILE__, __LINE__); fflush(stdout); free(x);}
+/*#define free(x) {printf("Freeing object %s at %p in file %s line %d\n", #x, x, __FILE__, __LINE__); fflush(stdout); free(x);}
 
 void* jj_malloc(size_t size, char* objectname, char* file, int line) {
 	void* p = malloc(size);
@@ -27,7 +27,7 @@ void* jj_malloc(size_t size, char* objectname, char* file, int line) {
 	ZeroMemory(p, size);
 	return p;
 }
-#define malloc(x) jj_malloc(x, #x, __FILE__, __LINE__)
+#define malloc(x) jj_malloc(x, #x, __FILE__, __LINE__)*/
 
 
 volatile BOOL terminateServer;
@@ -108,8 +108,8 @@ DWORD WINAPI workerThread(void* param) {
 			SwitchToThread();
 		}
 		else {
-			if (((PacketType*)queueElement->payload)[0] == PACKETTYPE_TIMESTAMP) {
-				TimestampPacket* packet = queueElement->payload;
+			TimestampPacket* packet = queueElement->payload;
+			if (packet->type == PACKETTYPE_TIMESTAMP) {
 				packet->time = getTime(state->timerState);
 			}
 			const int sendResult = send(socket, queueElement->payload, queueElement->length, 0);
