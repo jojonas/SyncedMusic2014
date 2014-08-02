@@ -253,9 +253,12 @@ int serverMain(int argc, char** argv)
 		for (int i = 0; i < MAX_CLIENTS; ++i) {
 			if (clientData[i].workerState) {
 				WaitForSingleObject(clientData[i].workerState->mutex, INFINITE);
-				if (clientData[i].workerState->join)
+				if (clientData[i].workerState->join) {
 					deleteClientData(clientData + i);
-				ReleaseMutex(clientData[i].workerState->mutex);
+				}
+				else {
+					ReleaseMutex(clientData[i].workerState->mutex);
+				}
 			}
 		}
 	}
