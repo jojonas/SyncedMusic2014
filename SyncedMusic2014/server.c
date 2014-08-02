@@ -45,6 +45,7 @@ typedef struct {
 	SOCKET socket;
 	BOOL terminate;
 	BOOL join;
+	TimerState* timerState;
 } QueueWorkerState;
 
 typedef struct {
@@ -107,6 +108,10 @@ DWORD WINAPI workerThread(void* param) {
 			SwitchToThread();
 		}
 		else {
+			if (((PacketType*)queueElement->payload)[0] == PACKETTYPE_TIMESTAMP) {
+				TimestampPacket* packet = queueElement->payload;
+				packet->time = getTime(state->timerState);
+			}
 			const int sendResult = send(socket, queueElement->payload, queueElement->length, 0);
 			if (sendResult == queueElement->length) {
 				DWORD waitResult = WaitForSingleObject(state->mutex, INFINITE);
@@ -257,6 +262,7 @@ int serverMain(int argc, char** argv)
 						clientData[nextClientIndex].workerState->terminate = FALSE;
 						clientData[nextClientIndex].workerState->join = FALSE;
 						clientData[nextClientIndex].workerState->head = 0;
+						clientData[nextClientIndex].workerState->timerState = timerState;
 
 						clientData[nextClientIndex].threadHandle = CreateThread(NULL, 0, workerThread, clientData[nextClientIndex].workerState, 0, NULL);
 						nextClientIndex = (nextClientIndex + 1) % MAX_CLIENTS;
@@ -284,7 +290,7 @@ int serverMain(int argc, char** argv)
 			TimestampPacket timestampPacket;
 			timestampPacket.type = PACKETTYPE_TIMESTAMP;
 			timestampPacket.size = sizeof(TimestampPacket);
-			timestampPacket.time = getTime(timerState);
+			timestampPacket.time = 0.0;
 			broadcast(clientData, (char*)&timestampPacket, timestampPacket.size);
 
 			nextTimestampBroadcastAt = now + randf(TIMESTAMP_BROADCAST_LOWER, TIMESTAMP_BROADCAST_UPPER);

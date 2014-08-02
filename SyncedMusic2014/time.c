@@ -55,30 +55,48 @@ TimerState* createTimer()
 	timerState->full = 0;
 	timerState->slope = 1;
 	timerState->offset = 0;
+	timerState->mutex = CreateMutex(NULL, 0, NULL);
+	if (!timerState->mutex) {
+		puts("Mutex for timer state could not be created.");
+		return 0;
+	}
 	return timerState;
 }
 
-timer_t getTime(TimerState* const timerState)
-{
-	if (timerState->dirty) {
-		updateLinearRegression(timerState);
-		timerState->dirty = 0;
-	}
+timer_t getTime(TimerState* const timerState) //TODO: ponder if mutexing could be done more clever
+{	
+	DWORD waitResult = WaitForSingleObject(timerState->mutex, INFINITE);
+	if (waitResult == WAIT_OBJECT_0) {
+		if (timerState->dirty) {
+			updateLinearRegression(timerState);
+			timerState->dirty = 0;
+		}
 
-	const timer_t highPrecisionTime = getHighPrecisionTime();
-	return timerState->slope * highPrecisionTime + timerState->offset;
+		const timer_t highPrecisionTime = getHighPrecisionTime();
+		return timerState->slope * highPrecisionTime + timerState->offset;
+	}
+	else {
+		puts("mutex for timerstate in getTime could not be acquired. Returning zero (hell breaks lose).");
+		return 0.0;
+	}
 }
 
 void updateTimer(TimerState* const timerState, const timer_t lowPrecisionTime)
 {
 	const timer_t highPrecisionTime = getHighPrecisionTime();
-	timerState->lowPrecisionTimePoints[timerState->nextPoint] = lowPrecisionTime;
-	timerState->highPrecisionTimePoints[timerState->nextPoint] = highPrecisionTime;
-	timerState->nextPoint = (timerState->nextPoint + 1) % TIMER_POINT_COUNT;
-	if (timerState->nextPoint == 0) 
-		timerState->full = 1;
-	
-	timerState->dirty = 1;
+	DWORD waitResult = WaitForSingleObject(timerState->mutex, INFINITE);
+	if (waitResult == WAIT_OBJECT_0) {
+		timerState->lowPrecisionTimePoints[timerState->nextPoint] = lowPrecisionTime;
+		timerState->highPrecisionTimePoints[timerState->nextPoint] = highPrecisionTime;
+		timerState->nextPoint = (timerState->nextPoint + 1) % TIMER_POINT_COUNT;
+		if (timerState->nextPoint == 0)
+			timerState->full = 1;
+
+		timerState->dirty = 1;
+	}
+	else {
+		puts("mutex for timerstate in updateTimer could not be acquired. Returning zero (hell breaks lose).");
+	}
 }
 
 

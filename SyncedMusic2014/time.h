@@ -1,6 +1,8 @@
 #ifndef TIME_H
 #define TIME_H
 
+#include <Windows.h>
+
 #define TIMER_POINT_COUNT 50
 
 typedef double timer_t;
@@ -14,6 +16,8 @@ typedef struct {
 
 	timer_t slope; // from linear regression: y=slope*x + offset
 	timer_t offset;
+
+	HANDLE mutex;
 } TimerState;
 
 TimerState* createTimer();
